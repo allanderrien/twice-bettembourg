@@ -1,7 +1,7 @@
 {
   "projet": "TWICE",
   "zone": "Bettembourg, Luxembourg",
-  "generated_at": "2026-02-18T16:15:28.688230+00:00",
+  "generated_at": "2026-02-18T16:21:54.066897+00:00",
   "now_index": 64,
   "hypotheses": {
     "H1": "Indice d'aléa = cumul 3h / 60.0mm (pas de modèle hydraulique)",
@@ -452,7 +452,7 @@
       0.0
     ],
     "now_index": 64,
-    "fetched_at": "2026-02-18T16:15:28.196478+00:00"
+    "fetched_at": "2026-02-18T16:21:53.409192+00:00"
   },
   "indices_alea": [
     0.013,
