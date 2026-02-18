@@ -1,456 +1,408 @@
 """
-TWICE — Générateur de rapport HTML
-Lit outputs/resultats_latest.json et produit outputs/rapport.html
-Aucune dépendance externe — HTML/CSS/JS pur avec Chart.js 4
+TWICE — Generateur de rapport HTML
+Version epuree : Chart.js standard, aucun plugin custom
 """
 
 import json
 from pathlib import Path
 
 
-def load_results(path: str = "outputs/resultats_latest.json") -> dict:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def statut_badge(statut: str) -> str:
-    colors = {
-        "normal":  ("#d1fae5", "#065f46", "●"),
-        "impacté": ("#fef3c7", "#92400e", "●"),
-        "coupé":   ("#fee2e2", "#991b1b", "●"),
-    }
-    bg, fg, dot = colors.get(statut, ("#f3f4f6", "#374151", "●"))
-    return (f'<span style="background:{bg};color:{fg};padding:2px 8px;'
-            f'border-radius:4px;font-size:11px;font-weight:600;">{dot} {statut}</span>')
-
-
-def format_eur(val: float) -> str:
-    return f"{val:,.0f} €".replace(",", "\u202f")
-
-
-def fmt_label(iso: str) -> str:
-    """YYYY-MM-DDTHH:MM → JJ/MM HH:MM"""
+def fmt_date(iso):
     if len(iso) >= 16:
-        d, m = iso[8:10], iso[5:7]
-        hhmm = iso[11:16]
-        return f"{d}/{m} {hhmm}"
+        return f"{iso[8:10]}/{iso[5:7]} {iso[11:16]}"
     return iso
 
 
-def generate_html(data: dict) -> str:
-    generated_at = data.get("generated_at", "")[:16].replace("T", " ")
-    zone         = data.get("zone", "")
-    hypotheses   = data.get("hypotheses", {})
-    meteo        = data.get("meteo", {})
-    indices      = data.get("indices_alea", [])
-    resultats    = data.get("resultats", [])
-    now_index    = data.get("now_index", 0)
-    times        = meteo.get("times", [])
-    precip       = meteo.get("precipitation", [])
+def fmt_eur(v):
+    return f"{int(v):,} EUR".replace(",", " ")
 
-    labels_js    = json.dumps([fmt_label(t) for t in times])
-    precip_js    = json.dumps([float(p or 0) for p in precip])
-    indices_js   = json.dumps(indices)
-    now_index_js = now_index
-    sites_js     = json.dumps(resultats)
 
-    # ── Tableau chronologique
-    chrono_rows = ""
-    if resultats:
-        for h in resultats[0].get("chronologie", []):
-            t      = fmt_label(h["time"])
-            p      = f"{float(h['precipitation_mm'] or 0):.1f}"
-            ia     = f"{h['indice_alea']:.2f}"
-            acc    = f"{h['accessibilite']:.0%}"
-            taux   = f"{h['taux_activite']:.0%}"
-            perte  = format_eur(h["perte_eur"])
-            routes = " ".join(statut_badge(v) for v in h.get("statuts_routes", {}).values())
-            is_fc  = h.get("is_forecast", False)
+def badge(statut):
+    c = {"normal": ("#d1fae5","#065f46"), "impacte": ("#fef3c7","#92400e"), "coupe": ("#fee2e2","#991b1b")}
+    bg, fg = c.get(statut, ("#f3f4f6","#374151"))
+    label  = {"normal":"normal","impacte":"impacte","coupe":"coupe"}.get(statut, statut)
+    return f'<span style="background:{bg};color:{fg};padding:1px 7px;border-radius:3px;font-size:11px;font-weight:600">{label}</span>'
 
-            if h["taux_activite"] == 0:
-                row_bg = 'style="background:#fff5f5;"'
-            elif h["taux_activite"] < 1:
-                row_bg = 'style="background:#fffbeb;"'
-            elif is_fc:
-                row_bg = 'style="background:#f0f9ff;"'
-            else:
-                row_bg = ""
 
-            fc_tag = (' <span style="font-size:10px;color:#0369a1;font-weight:600;">'
-                      'PRÉVIS.</span>') if is_fc else ""
-            chrono_rows += f"""
-            <tr {row_bg}>
-              <td>{t}{fc_tag}</td><td>{p} mm</td><td>{ia}</td>
-              <td>{routes}</td><td>{acc}</td><td>{taux}</td>
-              <td style="font-weight:600;text-align:right;">{perte}</td>
-            </tr>"""
+def generate(data):
+    times      = data["meteo"]["times"]
+    precip     = data["meteo"]["precipitation"]
+    indices    = data["indices_alea"]
+    resultats  = data["resultats"]
+    now_index  = data["now_index"]
+    gen_at     = data["generated_at"][:16].replace("T", " ")
+    hypotheses = data["hypotheses"]
 
-    # ── Cartes de synthèse
-    site_cards = ""
+    n = len(times)
+
+    # Labels JJ/MM HH:MM
+    labels     = [fmt_date(t) for t in times]
+    labels_js  = json.dumps(labels)
+    precip_js  = json.dumps(precip)
+    indices_js = json.dumps(indices)
+    now_js     = now_index
+
+    # Taux et pertes site 0
+    taux0   = [h["taux_activite"] * 100 for h in resultats[0]["chronologie"]]
+    pertes0 = []
+    cumul   = 0
+    for h in resultats[0]["chronologie"]:
+        cumul += h["perte_eur"]
+        pertes0.append(round(cumul))
+    taux0_js   = json.dumps(taux0)
+    pertes0_js = json.dumps(pertes0)
+
+    # Routes
+    route_ids = list(resultats[0]["chronologie"][0]["statuts_routes"].keys())
+    STATUT_VAL = {"normal": 1.0, "impacte": 0.5, "coupe": 0.0}
+    routes_data = {}
+    for rid in route_ids:
+        routes_data[rid] = [STATUT_VAL.get(h["statuts_routes"][rid], 1.0)
+                            for h in resultats[0]["chronologie"]]
+    routes_js = json.dumps(routes_data)
+    route_ids_js = json.dumps(route_ids)
+
+    # Cartes KPI
+    cards_html = ""
     for s in resultats:
-        perte   = format_eur(s["perte_totale_eur"])
-        acc_min = f"{s['accessibilite_min']:.0%}"
-        site_cards += f"""
-        <div class="site-card">
-          <div class="site-name">{s['site_nom']}</div>
-          <div class="site-type">{s.get('type','')}</div>
-          <div class="kpi-grid">
-            <div class="kpi"><div class="kpi-val loss">{perte}</div><div class="kpi-label">Perte totale estimée</div></div>
-            <div class="kpi"><div class="kpi-val">{s['heures_arret']}h</div><div class="kpi-label">Heures à l'arrêt</div></div>
-            <div class="kpi"><div class="kpi-val">{s['heures_degradees']}h</div><div class="kpi-label">Heures dégradées</div></div>
-            <div class="kpi"><div class="kpi-val">{acc_min}</div><div class="kpi-label">Accessibilité minimale</div></div>
+        cards_html += f"""
+        <div class="card">
+          <div class="card-title">{s['site_nom']}</div>
+          <div class="card-sub">{s['type']}</div>
+          <div class="kpis">
+            <div class="kpi"><div class="kv red">{fmt_eur(s['perte_totale_eur'])}</div><div class="kl">Perte totale</div></div>
+            <div class="kpi"><div class="kv">{s['heures_arret']}h</div><div class="kl">A l arret</div></div>
+            <div class="kpi"><div class="kv">{s['heures_degradees']}h</div><div class="kl">Degradees</div></div>
+            <div class="kpi"><div class="kv">{s['accessibilite_min']:.0%}</div><div class="kl">Access. min</div></div>
           </div>
         </div>"""
 
-    # ── Hypothèses
-    hyp_rows = "".join(
-        f"<tr><td><strong>{k}</strong></td><td>{v}</td></tr>"
-        for k, v in hypotheses.items()
-    )
+    # Tableau chronologique
+    rows_html = ""
+    for h in resultats[0]["chronologie"]:
+        td     = fmt_date(h["time"])
+        p      = f"{h['precipitation_mm']:.1f} mm"
+        ia     = f"{h['indice_alea']:.2f}"
+        acc    = f"{h['accessibilite']:.0%}"
+        taux   = f"{h['taux_activite']:.0%}"
+        perte  = fmt_eur(h["perte_eur"])
+        badges = " ".join(badge(v) for v in h["statuts_routes"].values())
+        fc     = ' <small style="color:#2563eb;font-weight:600">PREVIS.</small>' if h["is_forecast"] else ""
 
-    html = f"""<!DOCTYPE html>
+        if h["taux_activite"] == 0:
+            bg = 'style="background:#fff5f5"'
+        elif h["taux_activite"] < 1:
+            bg = 'style="background:#fffbeb"'
+        elif h["is_forecast"]:
+            bg = 'style="background:#f0f9ff"'
+        else:
+            bg = ""
+
+        rows_html += f"""<tr {bg}>
+          <td>{td}{fc}</td><td>{p}</td><td>{ia}</td>
+          <td>{badges}</td><td>{acc}</td><td>{taux}</td>
+          <td style="text-align:right;font-weight:600">{perte}</td>
+        </tr>"""
+
+    # Hypotheses
+    hyp_html = ""
+    for k, v in hypotheses.items():
+        hyp_html += f"<tr><td><b>{k}</b></td><td>{v}</td></tr>"
+
+    return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TWICE — Rapport Digital Twin Bettembourg</title>
+<title>TWICE — Rapport Bettembourg</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root {{
-    --ink:#1a1a2e; --mid:#4a4a6a; --muted:#9090a8;
-    --border:#e2e2ee; --bg:#f7f7fb; --white:#ffffff;
-    --accent:#2563eb; --danger:#dc2626;
-  }}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;}}
-  header{{background:var(--ink);color:white;padding:36px 48px 28px;display:flex;justify-content:space-between;align-items:flex-end;}}
-  .header-left h1{{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;letter-spacing:-0.5px;margin-bottom:4px;}}
-  .header-left .subtitle{{color:#a0a0c0;font-size:13px;font-weight:300;}}
-  .header-right{{text-align:right;font-size:12px;color:#a0a0c0;}}
-  .badge{{display:inline-block;background:var(--accent);color:white;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:6px;}}
-  .chain{{background:var(--white);border-bottom:1px solid var(--border);padding:14px 48px;display:flex;align-items:center;font-size:12px;color:var(--mid);font-weight:500;overflow-x:auto;gap:0;}}
-  .chain-step{{white-space:nowrap;padding:4px 12px;border-radius:4px;background:var(--bg);border:1px solid var(--border);}}
-  .chain-arrow{{margin:0 8px;color:var(--accent);font-size:16px;}}
-  .legend-bar{{background:var(--white);border-bottom:1px solid var(--border);padding:10px 48px;display:flex;gap:24px;font-size:12px;color:var(--mid);align-items:center;flex-wrap:wrap;}}
-  .leg{{display:flex;align-items:center;gap:6px;}}
-  .leg-box{{width:16px;height:10px;border-radius:2px;}}
-  main{{padding:32px 48px;max-width:1400px;margin:0 auto;}}
-  section{{margin-bottom:40px;}}
-  section h2{{font-family:'DM Serif Display',serif;font-size:18px;font-weight:400;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--ink);display:flex;align-items:center;gap:8px;}}
-  .num{{font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--accent);background:#eff6ff;padding:2px 8px;border-radius:4px;letter-spacing:1px;}}
-  .cards-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px;}}
-  .site-card{{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:24px;border-top:3px solid var(--accent);}}
-  .site-name{{font-family:'DM Serif Display',serif;font-size:17px;font-weight:400;margin-bottom:2px;}}
-  .site-type{{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:20px;}}
-  .kpi-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}}
-  .kpi-val{{font-size:22px;font-weight:600;line-height:1.2;}}
-  .kpi-val.loss{{color:var(--danger);}}
-  .kpi-label{{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px;}}
-  .chart-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:20px;}}
-  .chart-box{{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:20px 24px;}}
-  .chart-box h3{{font-size:13px;font-weight:600;color:var(--mid);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:16px;}}
-  .table-wrap{{background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:480px;}}
-  table{{width:100%;border-collapse:collapse;font-size:12.5px;}}
-  thead tr{{background:var(--ink);color:white;position:sticky;top:0;z-index:1;}}
-  thead th{{padding:10px 14px;text-align:left;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}}
-  tbody tr{{border-bottom:1px solid var(--border);}}
-  tbody tr:hover{{filter:brightness(0.97);}}
-  tbody td{{padding:8px 14px;vertical-align:middle;}}
-  .hyp-table{{width:100%;border-collapse:collapse;font-size:13px;}}
-  .hyp-table td{{padding:8px 12px;border-bottom:1px solid var(--border);}}
-  .hyp-table td:first-child{{width:40px;color:var(--accent);font-size:12px;}}
-  .hyp-table tr:last-child td{{border-bottom:none;}}
-  footer{{text-align:center;padding:24px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);margin-top:40px;}}
+* {{ box-sizing:border-box; margin:0; padding:0 }}
+body {{ font-family:Inter,sans-serif; background:#f4f5f7; color:#1e2433; font-size:14px }}
+
+header {{ background:#1e2433; color:#fff; padding:28px 40px; display:flex; justify-content:space-between; align-items:center }}
+header h1 {{ font-size:22px; font-weight:600; letter-spacing:-.3px }}
+header .sub {{ color:#8892a4; font-size:12px; margin-top:4px }}
+.badge-proto {{ background:#2563eb; color:#fff; font-size:10px; font-weight:700; padding:3px 9px; border-radius:12px; letter-spacing:.5px }}
+.meta {{ text-align:right; font-size:12px; color:#8892a4 }}
+
+.chain {{ background:#fff; border-bottom:1px solid #e4e6ea; padding:12px 40px; display:flex; align-items:center; gap:0; overflow-x:auto; font-size:12px; color:#4b5563; font-weight:500 }}
+.cs {{ white-space:nowrap; padding:4px 10px; border-radius:4px; background:#f4f5f7; border:1px solid #e4e6ea }}
+.ca {{ margin:0 6px; color:#2563eb }}
+
+main {{ padding:28px 40px; max-width:1300px; margin:0 auto }}
+section {{ margin-bottom:36px }}
+h2 {{ font-size:16px; font-weight:600; margin-bottom:14px; padding-bottom:8px; border-bottom:2px solid #1e2433; display:flex; align-items:center; gap:8px }}
+.sec-num {{ font-size:10px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 7px; border-radius:3px; letter-spacing:1px }}
+
+.cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:16px }}
+.card {{ background:#fff; border:1px solid #e4e6ea; border-radius:8px; padding:20px; border-top:3px solid #2563eb }}
+.card-title {{ font-size:16px; font-weight:600; margin-bottom:2px }}
+.card-sub {{ font-size:11px; color:#8892a4; text-transform:uppercase; letter-spacing:.7px; margin-bottom:16px }}
+.kpis {{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px }}
+.kv {{ font-size:20px; font-weight:700 }}
+.kv.red {{ color:#dc2626 }}
+.kl {{ font-size:10px; color:#8892a4; text-transform:uppercase; letter-spacing:.5px; margin-top:2px }}
+
+.charts {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); gap:16px }}
+.chart-box {{ background:#fff; border:1px solid #e4e6ea; border-radius:8px; padding:18px 20px }}
+.chart-box h3 {{ font-size:11px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.7px; margin-bottom:14px }}
+
+.now-label {{ display:flex; align-items:center; gap:16px; font-size:12px; color:#6b7280; margin-bottom:14px; padding:8px 12px; background:#fff; border:1px solid #e4e6ea; border-radius:6px; width:fit-content }}
+.dot {{ width:12px; height:3px; border-radius:2px }}
+
+.tbl-wrap {{ background:#fff; border:1px solid #e4e6ea; border-radius:8px; overflow:auto; max-height:460px }}
+table {{ width:100%; border-collapse:collapse; font-size:12px }}
+thead tr {{ background:#1e2433; color:#fff; position:sticky; top:0 }}
+thead th {{ padding:9px 12px; text-align:left; font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap }}
+tbody tr {{ border-bottom:1px solid #f0f1f3 }}
+tbody tr:hover {{ filter:brightness(.97) }}
+tbody td {{ padding:7px 12px; vertical-align:middle }}
+
+.hyp-tbl {{ width:100%; border-collapse:collapse; font-size:13px }}
+.hyp-tbl td {{ padding:7px 12px; border-bottom:1px solid #f0f1f3 }}
+.hyp-tbl tr:last-child td {{ border-bottom:none }}
+
+footer {{ text-align:center; padding:20px; font-size:11px; color:#9ca3af; border-top:1px solid #e4e6ea; margin-top:20px }}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="header-left">
-    <h1>TWICE — Digital Twin Bettembourg</h1>
-    <div class="subtitle">Rapport de simulation · Interruption d'activité sans dommage direct</div>
+  <div>
+    <h1>TWICE &mdash; Digital Twin Bettembourg</h1>
+    <div class="sub">Interruption d'activite sans dommage direct &middot; Zone logistique Luxembourg</div>
   </div>
-  <div class="header-right">
-    <div class="badge">PROTOTYPE</div><br>
-    {zone}<br>Généré le {generated_at} UTC
+  <div class="meta">
+    <div class="badge-proto">PROTOTYPE</div>
+    <div style="margin-top:6px">Genere le {gen_at} UTC</div>
   </div>
 </header>
 
 <div class="chain">
-  <span class="chain-step">🌧 Précipitations</span><span class="chain-arrow">→</span>
-  <span class="chain-step">📊 Indice d'aléa</span><span class="chain-arrow">→</span>
-  <span class="chain-step">🛣 Statut des routes</span><span class="chain-arrow">→</span>
-  <span class="chain-step">🏭 Accessibilité</span><span class="chain-arrow">→</span>
-  <span class="chain-step">💶 Pertes économiques</span>
-</div>
-
-<div class="legend-bar">
-  <span style="font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Légende :</span>
-  <span class="leg"><span class="leg-box" style="background:rgba(59,130,246,0.6);"></span>Historique</span>
-  <span class="leg"><span class="leg-box" style="background:rgba(59,130,246,0.2);border:1px dashed #93c5fd;"></span>Prévisions</span>
-  <span class="leg"><span style="color:#dc2626;font-weight:700;font-size:14px;">|</span>&nbsp;Maintenant</span>
-  <span class="leg"><span class="leg-box" style="background:#fef3c7;border:1px solid #fcd34d;"></span>Activité dégradée</span>
-  <span class="leg"><span class="leg-box" style="background:#fee2e2;border:1px solid #fca5a5;"></span>Arrêt</span>
+  <span class="cs">Precipitations</span><span class="ca">&#8594;</span>
+  <span class="cs">Indice d'alea</span><span class="ca">&#8594;</span>
+  <span class="cs">Statut routes</span><span class="ca">&#8594;</span>
+  <span class="cs">Accessibilite</span><span class="ca">&#8594;</span>
+  <span class="cs">Pertes economiques</span>
 </div>
 
 <main>
 
-  <section>
-    <h2><span class="num">01</span> Synthèse par site logistique</h2>
-    <div class="cards-grid">{site_cards}</div>
-  </section>
+<section>
+  <h2><span class="sec-num">01</span> Synthese par site</h2>
+  <div class="cards">{cards_html}</div>
+</section>
 
-  <section>
-    <h2><span class="num">02</span> Visualisation temporelle (2j passés + 7j prévisions)</h2>
-    <div class="chart-grid">
-      <div class="chart-box">
-        <h3>Précipitations horaires &amp; indice d'aléa</h3>
-        <canvas id="chartAlea" height="200"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Statut des routes dans le temps</h3>
-        <canvas id="chartRoutes" height="200"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Taux d'activité — Terminal Eurohub Sud</h3>
-        <canvas id="chartTaux" height="200"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Pertes cumulées — Terminal Eurohub Sud</h3>
-        <canvas id="chartPertes" height="200"></canvas>
-      </div>
-    </div>
-  </section>
+<section>
+  <h2><span class="sec-num">02</span> Visualisation temporelle</h2>
+  <div class="now-label">
+    <span><span style="color:#dc2626;font-weight:700">|</span> = maintenant (separation historique / previsions)</span>
+    <span><span class="dot" style="background:rgba(59,130,246,.6)"></span> Historique</span>
+    <span><span class="dot" style="background:rgba(59,130,246,.2);border:1px dashed #93c5fd"></span> Previsions</span>
+  </div>
+  <div class="charts">
+    <div class="chart-box"><h3>Precipitations (mm/h) &amp; indice d'alea</h3><canvas id="cAlea" height="200"></canvas></div>
+    <div class="chart-box"><h3>Statut des routes</h3><canvas id="cRoutes" height="200"></canvas></div>
+    <div class="chart-box"><h3>Taux d'activite — Eurohub Sud</h3><canvas id="cTaux" height="200"></canvas></div>
+    <div class="chart-box"><h3>Pertes cumulees — Eurohub Sud</h3><canvas id="cPertes" height="200"></canvas></div>
+  </div>
+</section>
 
-  <section>
-    <h2><span class="num">03</span> Chronologie détaillée — Terminal Eurohub Sud</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>Date / Heure</th><th>Précip.</th><th>Indice aléa</th>
-          <th>Statut routes</th><th>Accessibilité</th><th>Taux activité</th>
-          <th style="text-align:right;">Perte (€)</th>
-        </tr></thead>
-        <tbody>{chrono_rows}</tbody>
-      </table>
-    </div>
-  </section>
+<section>
+  <h2><span class="sec-num">03</span> Chronologie detaillee — Terminal Eurohub Sud</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>Date/Heure</th><th>Precip.</th><th>Indice</th>
+        <th>Routes</th><th>Accessib.</th><th>Taux act.</th>
+        <th style="text-align:right">Perte</th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+  </div>
+</section>
 
-  <section>
-    <h2><span class="num">04</span> Hypothèses du modèle</h2>
-    <div class="table-wrap" style="padding:4px 0;">
-      <table class="hyp-table">{hyp_rows}</table>
-    </div>
-  </section>
+<section>
+  <h2><span class="sec-num">04</span> Hypotheses</h2>
+  <div class="tbl-wrap">
+    <table class="hyp-tbl">{hyp_html}</table>
+  </div>
+</section>
 
 </main>
 
-<footer>
-  TWICE — Prototype Digital Twin · Données météo : Open-Meteo API · Réseau routier : OpenStreetMap
-</footer>
+<footer>TWICE Prototype &middot; Meteo : Open-Meteo &middot; Reseau : OpenStreetMap</footer>
 
 <script>
-const LABELS   = {labels_js};
-const PRECIP   = {precip_js};
-const INDICES  = {indices_js};
-const SITES    = {sites_js};
-const NOW_IDX  = {now_index_js};
-const N        = LABELS.length;
+var LABELS    = {labels_js};
+var PRECIP    = {precip_js};
+var INDICES   = {indices_js};
+var TAUX0     = {taux0_js};
+var PERTES0   = {pertes0_js};
+var ROUTES    = {routes_js};
+var ROUTE_IDS = {route_ids_js};
+var NOW       = {now_js};
+var N         = LABELS.length;
 
-// ── Utilitaires ──────────────────────────────────────────────
+var GRID  = '#e9eaec';
+var TFONT = {{family:'Inter',size:10}};
 
-// Couleur différente selon passé/prévision
-function colorByTime(baseRgb, alphaHist, alphaFc) {{
-  return LABELS.map((_, i) =>
-    i <= NOW_IDX
-      ? `rgba(${{baseRgb}},${{alphaHist}})`
-      : `rgba(${{baseRgb}},${{alphaFc}})`
-  );
-}}
-
-// Sépare une série en deux segments : passé (plein) + prévision (pointillé)
-// Retourne deux datasets à superposer
-function splitSeries(label, data, color, extra) {{
-  const past = data.map((v, i) => i <= NOW_IDX + 1 ? v : null);
-  const fc   = data.map((v, i) => i >= NOW_IDX     ? v : null);
-  return [
-    {{ label, data: past, borderColor: color, borderWidth: 2, pointRadius: 0, spanGaps: false, ...extra }},
-    {{ label: label + ' (prévision)', data: fc, borderColor: color, borderWidth: 2,
-       pointRadius: 0, borderDash: [5, 4], spanGaps: false, ...extra,
-       backgroundColor: 'transparent' }}
-  ];
-}}
-
-// ── Plugin "maintenant" : ligne rouge + zone prévision ───────
-const nowLinePlugin = {{
+// Annotation ligne "maintenant" via un dataset vertical factice
+// Methode simple : on dessine via un plugin inline sans Chart.register global
+var nowPlugin = {{
   id: 'nowLine',
-  beforeDraw(chart) {{
-    const {{ctx, chartArea, scales}} = chart;
-    if (!chartArea || !scales.x) return;
-    const xPos = scales.x.getPixelForValue(NOW_IDX);
-    // Zone prévision
+  afterDatasetsDraw: function(chart) {{
+    var ctx = chart.ctx;
+    var ca  = chart.chartArea;
+    var x   = chart.scales.x.getPixelForValue(NOW);
+    if (!ca || isNaN(x)) return;
     ctx.save();
-    ctx.fillStyle = 'rgba(219,234,254,0.22)';
-    ctx.fillRect(xPos, chartArea.top, chartArea.right - xPos, chartArea.bottom - chartArea.top);
-    ctx.restore();
-  }},
-  afterDraw(chart) {{
-    const {{ctx, chartArea, scales}} = chart;
-    if (!chartArea || !scales.x) return;
-    const xPos = scales.x.getPixelForValue(NOW_IDX);
-    // Ligne
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(xPos, chartArea.top);
-    ctx.lineTo(xPos, chartArea.bottom);
-    ctx.strokeStyle = 'rgba(220,38,38,0.75)';
+    ctx.strokeStyle = '#dc2626';
     ctx.lineWidth   = 1.5;
-    ctx.setLineDash([4, 3]);
-    ctx.stroke();
-    // Label
-    ctx.fillStyle = '#dc2626';
-    ctx.font      = 'bold 10px DM Sans, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('maintenant', xPos, chartArea.top - 5);
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(x, ca.top); ctx.lineTo(x, ca.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#dc2626'; ctx.font = 'bold 9px Inter,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('maintenant', x, ca.top - 4);
     ctx.restore();
   }}
 }};
 
-Chart.register(nowLinePlugin);
-
-// ── Config commune ───────────────────────────────────────────
-const TF   = {{ family: 'DM Sans', size: 10 }};
-const GRID = '#e2e2ee';
-
-// Axe X : labels toutes les 12h
-const xAxis = {{
-  type: 'category',
+var xCfg = {{
   ticks: {{
-    font: TF,
-    maxRotation: 45,
-    callback(val, i) {{ return i % 12 === 0 ? LABELS[i] : ''; }}
+    font: TFONT, maxRotation: 45,
+    callback: function(v,i) {{ return i % 12 === 0 ? LABELS[i] : ''; }}
   }},
-  grid: {{ color: GRID }}
+  grid: {{color: GRID}}
 }};
 
-const baseOpts = (scales) => ({{
-  responsive: true,
-  maintainAspectRatio: true,
-  animation: {{ duration: 0 }},
-  plugins: {{
-    legend: {{ labels: {{ font: TF, boxWidth: 12, filter: item => !item.text.includes('prévision') }} }},
-
-  }},
-  scales
+var bgPrecip = PRECIP.map(function(_,i){{
+  return i <= NOW ? 'rgba(59,130,246,.65)' : 'rgba(59,130,246,.18)';
 }});
 
-// ── Graphique 1 : Précipitations + indice d'aléa ────────────
-new Chart(document.getElementById('chartAlea'), {{
+// ── Graphique 1 : Precip + indice ──
+new Chart(document.getElementById('cAlea'), {{
   type: 'bar',
+  plugins: [nowPlugin],
   data: {{
     labels: LABELS,
     datasets: [
       {{
-        type: 'bar',
-        label: 'Précipitations (mm/h)',
-        data: PRECIP,
-        backgroundColor: colorByTime('59,130,246', 0.65, 0.2),
-        yAxisID: 'yP',
-        order: 2
+        type: 'bar', label: 'Precip (mm/h)', data: PRECIP,
+        backgroundColor: bgPrecip, yAxisID: 'yP', order: 2
       }},
-      ...splitSeries(
-        'Indice d\'aléa [0–1]', INDICES,
-        'rgba(220,38,38,0.9)',
-        {{ type:'line', fill: false, tension: 0.3, yAxisID: 'yA', order: 1 }}
-      )
+      {{
+        type: 'line', label: 'Indice alea', data: INDICES,
+        borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,.06)',
+        borderWidth: 2, pointRadius: 0, fill: true, tension: .3,
+        yAxisID: 'yA', order: 1
+      }}
     ]
   }},
-  options: baseOpts({{
-    x:  xAxis,
-    yP: {{ type:'linear', position:'left',  title:{{ display:true, text:'mm/h', font:{{size:10}} }}, grid:{{ color:GRID }}, ticks:{{ font:TF }} }},
-    yA: {{ type:'linear', position:'right', min:0, max:1, title:{{ display:true, text:'Indice', font:{{size:10}} }}, grid:{{ drawOnChartArea:false }}, ticks:{{ font:TF }} }}
-  }})
+  options: {{
+    responsive: true, maintainAspectRatio: true, animation: false,
+    plugins: {{legend: {{labels: {{font: TFONT, boxWidth:12}}}}}},
+    scales: {{
+      x:  xCfg,
+      yP: {{type:'linear',position:'left', grid:{{color:GRID}},ticks:{{font:TFONT}},title:{{display:true,text:'mm/h',font:{{size:9}}}}}},
+      yA: {{type:'linear',position:'right',min:0,max:1,grid:{{drawOnChartArea:false}},ticks:{{font:TFONT}},title:{{display:true,text:'Indice',font:{{size:9}}}}}}
+    }}
+  }}
 }});
 
-// ── Graphique 2 : Statut des routes ─────────────────────────
-const ROUTE_IDS    = SITES[0]?.chronologie[0] ? Object.keys(SITES[0].chronologie[0].statuts_routes) : [];
-const ROUTE_COLORS = ['59,130,246','5,150,105','217,119,6','168,85,247'];
-const STATUT_VAL   = {{ 'normal':1.0, 'impacté':0.5, 'coupé':0.0 }};
+// ── Graphique 2 : Routes ──
+var RCOLS = ['#2563eb','#059669','#d97706','#7c3aed'];
+var rDatasets = ROUTE_IDS.map(function(rid, i) {{
+  return {{
+    label: rid.replace(/_/g,' '),
+    data:  ROUTES[rid],
+    borderColor: RCOLS[i % RCOLS.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2, pointRadius: 0, stepped: true, tension: 0
+  }};
+}});
 
-new Chart(document.getElementById('chartRoutes'), {{
+new Chart(document.getElementById('cRoutes'), {{
   type: 'line',
+  plugins: [nowPlugin],
+  data: {{labels: LABELS, datasets: rDatasets}},
+  options: {{
+    responsive: true, maintainAspectRatio: true, animation: false,
+    plugins: {{legend: {{labels: {{font: TFONT, boxWidth:12}}}}}},
+    scales: {{
+      x: xCfg,
+      y: {{
+        min: -.1, max: 1.1, grid: {{color:GRID}},
+        ticks: {{font:TFONT, callback: function(v){{
+          return v===1?'Normal':v===.5?'Impacte':v===0?'Coupe':'';
+        }}}}
+      }}
+    }}
+  }}
+}});
+
+// ── Graphique 3 : Taux activite ──
+new Chart(document.getElementById('cTaux'), {{
+  type: 'line',
+  plugins: [nowPlugin],
   data: {{
     labels: LABELS,
-    datasets: ROUTE_IDS.flatMap((rid, i) => {{
-      const vals  = SITES[0].chronologie.map(h => STATUT_VAL[h.statuts_routes[rid]] ?? 1);
-      const color = `rgba(${{ROUTE_COLORS[i % ROUTE_COLORS.length]}},0.85)`;
-      return splitSeries(rid.replace(/_/g,' '), vals, color, {{ stepped: true, fill: false }});
-    }})
+    datasets: [{{
+      label: 'Taux activite (%)',
+      data: TAUX0,
+      borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.08)',
+      borderWidth: 2, pointRadius: 0, fill: true, stepped: true
+    }}]
   }},
-  options: baseOpts({{
-    x: xAxis,
-    y: {{
-      min: -0.05, max: 1.1, grid: {{ color: GRID }},
-      ticks: {{ font: TF, callback: v => v===1?'Normal':v===0.5?'Impacté':v===0?'Coupé':'' }}
+  options: {{
+    responsive: true, maintainAspectRatio: true, animation: false,
+    plugins: {{legend: {{labels: {{font: TFONT, boxWidth:12}}}}}},
+    scales: {{
+      x: xCfg,
+      y: {{min:0,max:105,grid:{{color:GRID}},ticks:{{font:TFONT,callback:function(v){{return v+'%';}}}}}}
     }}
-  }})
+  }}
 }});
 
-// ── Graphique 3 : Taux d'activité ───────────────────────────
-if (SITES[0]) {{
-  const taux = SITES[0].chronologie.map(h => h.taux_activite * 100);
-  new Chart(document.getElementById('chartTaux'), {{
-    type: 'line',
-    data: {{
-      labels: LABELS,
-      datasets: splitSeries(
-        'Taux d\'activité (%)', taux,
-        'rgba(37,99,235,0.9)',
-        {{ fill: true, backgroundColor:'rgba(37,99,235,0.08)', stepped: true }}
-      )
-    }},
-    options: baseOpts({{
-      x: xAxis,
-      y: {{ min:0, max:105, grid:{{ color:GRID }}, ticks:{{ font:TF, callback: v => v+'%' }} }}
-    }})
-  }});
-}}
-
-// ── Graphique 4 : Pertes cumulées ───────────────────────────
-if (SITES[0]) {{
-  let cumul = 0;
-  const cumData = SITES[0].chronologie.map(h => {{ cumul += h.perte_eur; return Math.round(cumul); }});
-  new Chart(document.getElementById('chartPertes'), {{
-    type: 'line',
-    data: {{
-      labels: LABELS,
-      datasets: splitSeries(
-        'Pertes cumulées (€)', cumData,
-        'rgba(220,38,38,0.9)',
-        {{ fill: true, backgroundColor:'rgba(220,38,38,0.07)', tension: 0.3 }}
-      )
-    }},
-    options: baseOpts({{
-      x: xAxis,
-      y: {{ grid:{{ color:GRID }}, ticks:{{ font:TF, callback: v => v.toLocaleString('fr-FR')+' €' }} }}
-    }})
-  }});
-}}
+// ── Graphique 4 : Pertes cumulees ──
+new Chart(document.getElementById('cPertes'), {{
+  type: 'line',
+  plugins: [nowPlugin],
+  data: {{
+    labels: LABELS,
+    datasets: [{{
+      label: 'Pertes cumulees',
+      data: PERTES0,
+      borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,.07)',
+      borderWidth: 2, pointRadius: 0, fill: true, tension: .3
+    }}]
+  }},
+  options: {{
+    responsive: true, maintainAspectRatio: true, animation: false,
+    plugins: {{legend: {{labels: {{font: TFONT, boxWidth:12}}}}}},
+    scales: {{
+      x: xCfg,
+      y: {{grid:{{color:GRID}},ticks:{{font:TFONT,callback:function(v){{return v.toLocaleString('fr-FR')+' EUR';}}}}}}
+    }}
+  }}
+}});
 </script>
-
 </body>
 </html>"""
-    return html
 
 
 def main():
-    print("→ Chargement des résultats...")
-    data = load_results("outputs/resultats_latest.json")
-    print("→ Génération du rapport HTML...")
-    html = generate_html(data)
+    print("Chargement resultats...")
+    with open("outputs/resultats_latest.json", encoding="utf-8") as f:
+        data = json.load(f)
+    print("Generation rapport HTML...")
+    html = generate(data)
+    import os
+    os.makedirs("docs", exist_ok=True)
     Path("outputs/rapport.html").write_text(html, encoding="utf-8")
-    print("→ Rapport généré : outputs/rapport.html")
+    Path("docs/rapport.html").write_text(html, encoding="utf-8")
+    print("Rapport genere : outputs/rapport.html + docs/rapport.html")
 
 
 if __name__ == "__main__":
