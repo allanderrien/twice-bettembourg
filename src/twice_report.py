@@ -340,7 +340,7 @@ const baseOpts = (scales) => ({{
   animation: {{ duration: 0 }},
   plugins: {{
     legend: {{ labels: {{ font: TF, boxWidth: 12, filter: item => !item.text.includes('prévision') }} }},
-    nowLine: {{}}
+
   }},
   scales
 }});
