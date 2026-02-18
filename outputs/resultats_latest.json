@@ -1,7 +1,7 @@
 {
   "projet": "TWICE",
   "zone": "Bettembourg, Luxembourg",
-  "generated_at": "2026-02-18T15:40:30.766643+00:00",
+  "generated_at": "2026-02-18T15:51:16.121009+00:00",
   "hypotheses": {
     "H1": "Indice d'aléa = cumul 3h / 60.0mm (pas de modèle hydraulique)",
     "H2": "Route impactée si indice ≥ seuil_impact, coupée si ≥ seuil_coupure",
@@ -107,13 +107,13 @@
       0.0,
       0.0,
       0.0,
+      0.0,
       0.1,
-      0.8,
-      1.6,
-      2.4,
-      2.1
+      2.3,
+      2.6,
+      2.9
     ],
-    "fetched_at": "2026-02-18T15:40:30.765154+00:00"
+    "fetched_at": "2026-02-18T15:51:16.119694+00:00"
   },
   "indices_alea": [
     0.0,
@@ -159,11 +159,11 @@
     0.0,
     0.0,
     0.0,
+    0.0,
     0.002,
-    0.015,
-    0.042,
-    0.08,
-    0.102
+    0.04,
+    0.083,
+    0.13
   ],
   "resultats": [
     {
@@ -780,6 +780,20 @@
         },
         {
           "time": "2026-02-18T19:00",
+          "precipitation_mm": 0.0,
+          "indice_alea": 0.0,
+          "accessibilite": 1.0,
+          "taux_activite": 1.0,
+          "perte_eur": 0.0,
+          "statuts_routes": {
+            "A3_bettembourg": "normal",
+            "N31_bettembourg": "normal",
+            "voirie_interne": "normal",
+            "route_wolser": "normal"
+          }
+        },
+        {
+          "time": "2026-02-18T20:00",
           "precipitation_mm": 0.1,
           "indice_alea": 0.002,
           "accessibilite": 1.0,
@@ -793,23 +807,9 @@
           }
         },
         {
-          "time": "2026-02-18T20:00",
-          "precipitation_mm": 0.8,
-          "indice_alea": 0.015,
-          "accessibilite": 1.0,
-          "taux_activite": 1.0,
-          "perte_eur": 0.0,
-          "statuts_routes": {
-            "A3_bettembourg": "normal",
-            "N31_bettembourg": "normal",
-            "voirie_interne": "normal",
-            "route_wolser": "normal"
-          }
-        },
-        {
           "time": "2026-02-18T21:00",
-          "precipitation_mm": 1.6,
-          "indice_alea": 0.042,
+          "precipitation_mm": 2.3,
+          "indice_alea": 0.04,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
@@ -822,8 +822,8 @@
         },
         {
           "time": "2026-02-18T22:00",
-          "precipitation_mm": 2.4,
-          "indice_alea": 0.08,
+          "precipitation_mm": 2.6,
+          "indice_alea": 0.083,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
@@ -836,8 +836,8 @@
         },
         {
           "time": "2026-02-18T23:00",
-          "precipitation_mm": 2.1,
-          "indice_alea": 0.102,
+          "precipitation_mm": 2.9,
+          "indice_alea": 0.13,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
@@ -1464,6 +1464,20 @@
         },
         {
           "time": "2026-02-18T19:00",
+          "precipitation_mm": 0.0,
+          "indice_alea": 0.0,
+          "accessibilite": 1.0,
+          "taux_activite": 1.0,
+          "perte_eur": 0.0,
+          "statuts_routes": {
+            "A3_bettembourg": "normal",
+            "N31_bettembourg": "normal",
+            "voirie_interne": "normal",
+            "route_wolser": "normal"
+          }
+        },
+        {
+          "time": "2026-02-18T20:00",
           "precipitation_mm": 0.1,
           "indice_alea": 0.002,
           "accessibilite": 1.0,
@@ -1477,23 +1491,9 @@
           }
         },
         {
-          "time": "2026-02-18T20:00",
-          "precipitation_mm": 0.8,
-          "indice_alea": 0.015,
-          "accessibilite": 1.0,
-          "taux_activite": 1.0,
-          "perte_eur": 0.0,
-          "statuts_routes": {
-            "A3_bettembourg": "normal",
-            "N31_bettembourg": "normal",
-            "voirie_interne": "normal",
-            "route_wolser": "normal"
-          }
-        },
-        {
           "time": "2026-02-18T21:00",
-          "precipitation_mm": 1.6,
-          "indice_alea": 0.042,
+          "precipitation_mm": 2.3,
+          "indice_alea": 0.04,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
@@ -1506,8 +1506,8 @@
         },
         {
           "time": "2026-02-18T22:00",
-          "precipitation_mm": 2.4,
-          "indice_alea": 0.08,
+          "precipitation_mm": 2.6,
+          "indice_alea": 0.083,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
@@ -1520,8 +1520,8 @@
         },
         {
           "time": "2026-02-18T23:00",
-          "precipitation_mm": 2.1,
-          "indice_alea": 0.102,
+          "precipitation_mm": 2.9,
+          "indice_alea": 0.13,
           "accessibilite": 1.0,
           "taux_activite": 1.0,
           "perte_eur": 0.0,
