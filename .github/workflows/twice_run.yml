@@ -4,66 +4,52 @@ on:
   workflow_dispatch:
     inputs:
       ca_eurohub:
-        description: "CA journalier Eurohub Sud (€)"
+        description: "CA journalier Eurohub Sud (EUR)"
         required: false
         default: "500000"
-        type: string
       ca_wolser:
-        description: "CA journalier Zone Wolser (€)"
+        description: "CA journalier Zone Wolser (EUR)"
         required: false
         default: "150000"
-        type: string
 
 jobs:
   run-twice:
-    name: Calcul chaîne causale TWICE
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: pip install requests
 
-      - name: Prepare output directory
+      - name: Create folders
         run: mkdir -p outputs docs
 
-      - name: Run TWICE simulation
-        env:
-          CA_EUROHUB: ${{ github.event.inputs.ca_eurohub }}
-          CA_WOLSER:  ${{ github.event.inputs.ca_wolser }}
+      - name: Run simulation
         run: python src/twice_run.py
 
-      - name: Generate HTML report
+      - name: Generate report
         run: python src/twice_report.py
 
-      - name: Copy outputs to docs (GitHub Pages)
-        run: |
-          cp outputs/rapport.html          docs/rapport.html
-          cp outputs/resultats_latest.json docs/resultats_latest.json
-
-      - name: Upload results and report as artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: twice-resultats-${{ github.run_number }}
+          name: twice-run-${{ github.run_number }}
           path: |
             outputs/resultats_latest.json
             outputs/rapport.html
           retention-days: 30
 
-      - name: Commit results and report to repository
+      - name: Commit to repo
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add outputs/resultats_latest.json outputs/rapport.html \
-                  docs/rapport.html docs/resultats_latest.json
-          git diff --staged --quiet || git commit -m "chore: update TWICE results + report [run #${{ github.run_number }}]"
+          git add outputs/ docs/
+          git diff --staged --quiet || git commit -m "chore: TWICE run #${{ github.run_number }}"
           git push
